@@ -1,0 +1,4 @@
+INCLUDE_DIRS = Inc lib ;
+BIN_DIR = bin ;
+LIB_DIRS = lib ;
+StaticExecutable ProtoTension : Src : $(LIBS) ;
