@@ -222,43 +222,93 @@ void SimulateFluids(float DeltaTime)
 		ParticleImpulses[i] = Vector2(0.0f, 0.0f);
 	}
 
+	float RadSqr = Radius*Radius;
+
 	for(unsigned int x=0; x<ParticleLocations.size(); x++)
 	{
+		float d = 0;
+		float dn = 0;
 		for(unsigned int y=x+1; y<ParticleLocations.size(); y++)
 		{
 			Vector3 Delta = ParticleLocations[x] - ParticleLocations[y];
-			float Dist = length(Delta);
-			if(Dist <= FluidRadius)
+			float DistSqr = lengthSqr(Delta);
+
+			if(DistSqr < RadSqr)
 			{
-				Vector3 RelativeImpulse;
-				Vector3 RelativeVelocity = ParticleVelocities[x] - ParticleVelocities[y];
-				Vector3 DistVector = ParticleLocations[x] - ParticleLocations[y];
-				float d = dot(normalize(RelativeVelocity), normalize(DistVector));
-				//float d = dot(normalize(ParticleVelocities[x]), normalize(ParticleVelocities[y]));
-				if(d < 0.0f)
-				{
-					RelativeImpulse = normalize(DistVector) * length(RelativeVelocity) * d * (1.0f - (Dist / FluidRadius));
+				float Dist = sqrt(DistSqr);
+				float q = q - Dist / Radius;
+				float q2 = q * q;
+				float q3 = q2 * q;
+
+				d += q2;
+				dn += q3;
+
+				ParticleDensity[x] += q2;
+				ParticleDensityNear[x] += q3;
+			}
+		}
+		ParticleDensity[x] += d;
+		ParticleDensityNear[x] += dn;
+	}
+
+
+	float RestDensity = 1.0f;
+	float GasK = 0.75f;
+	float GasKNear = 0.9f;
+	
+	for(unsigned int i=0; i<ParticleLocations.size(); i++)
+	{
+		ParticlePressure[x] = GasK * (ParticleDensity[x] - RestDensity);
+		ParticlePressureNear[x] = GasKNear * ParticleDensityNear[x];
+	}
+
+	for(unsigned int x=0; x<ParticleLocations.size(); x++)
+	{
+		Vector3 DX = Vector3(0.0f, 0.0f, 0.0f);
+		for(unsigned int y=x+1; y<ParticleLocations.size(); y++)
+		{
+			Vector3 Delta = ParticleLocations[x] - ParticleLocations[y];
+			float DistSqr = lengthSqr(Delta);
+
+			if(DistSqr < RadSqr)
+			{
+				float dm = (ParticlePressure[x] + ParticlePressure[y]) * q +
+					(ParticlePressureNear[x] + ParticlePressureNear[y]) * q2;
 				
-					ParticleImpulses[x] -= RelativeImpulse/2;
-					ParticleImpulses[y] += RelativeImpulse/2;
-				}
+				Vector3 D = normal(Delta) * dm;
+				DX += D;
+
+				ParticleForce[y] += D;
+			}
+			
+			ParticleForce[x] -= DX;
+		}
+	}
+
+
+	for(unsigned int x=0; x<ParticleLocations.size(); x++)
+	{
+		Vector3 DX = Vector3(0.0f, 0.0f, 0.0f);
+		for(unsigned int y=x+1; y<ParticleLocations.size(); y++)
+		{
+			Vector3 Delta = ParticleLocations[x] - ParticleLocations[y];
+			float DistSqr = lengthSqr(Delta);
+
+			if(DistSqr < RadSqr)
+			{
+				float Dist = sqrt(DistSqr);
+				float q = Dist / Radius;
+
+				Vector3 NormalVect = normal(Delta);
+
+				float u = dot(ParticleVelocities[x] - ParticleVelocities[y], NormalVect);
+
+				if(u > 0)
+					Vector3 I = (Dist-q) * (Sigma * u + Beta * u * u);
 			}
 		}
 	}
-
-	for(unsigned int i=0; i<ParticleLocations.size(); i++)
-	{
-		ParticleVelocities[i] += ParticleImpulses[i];
-		if(length(ParticleVelocities[i]) > MaxFluidSpeed)
-		{
-			ParticleVelocities[i] = normalize(ParticleVelocities[i]) * MaxFluidSpeed;
-		}
-	}
-
-	for(unsigned int i=0; i<ParticleLocations.size(); i++)
-	{
-		ParticleLocations[i] += ParticleVelocities[i] * DeltaTime;
-	}
+	
 
 	ElapsedWaveTime += DeltaTime;
 	if(ElapsedWaveTime >= 1.5f)
